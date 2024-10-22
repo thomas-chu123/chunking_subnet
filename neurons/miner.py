@@ -46,11 +46,15 @@ from chunking.utils.relay.relay import (
     sha256_hash,
 )
 
+from sklearn.cluster import KMeans
+from sentence_transformers import SentenceTransformer
+
 
 class Miner(BaseMinerNeuron):
 
     def __init__(self):
         super(Miner, self).__init__()
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
 
         self.nonces = {}
         self.recent_queries = []
@@ -299,16 +303,53 @@ class Miner(BaseMinerNeuron):
 
         return chunks
 
-    def chunk_document(
-        self, document: str, chunk_size: int, max_num_chunks: int
+    def rag_chunker(self, document: str, chunk_size: int, max_num_chunks: int) -> List[str]:
+        """
+        Improved chunker that takes into account the semantic meaning of the text and considers the maximum number of chunks.
+        """
+        sentences = sent_tokenize(document)
+        embeddings = self.model.encode(sentences)  # Get sentence embeddings
+
+        # Use KMeans clustering to group sentences into chunks
+        num_chunks = min(max_num_chunks, len(sentences) // chunk_size + 1)
+        kmeans = KMeans(n_clusters=num_chunks)
+        kmeans.fit(embeddings)
+        clusters = kmeans.predict(embeddings)
+
+        # Group sentences by their cluster labels
+        chunks = [''] * num_chunks
+        for idx, cluster in enumerate(clusters):
+            chunks[cluster] += sentences[idx] + ' '
+
+        # Ensure each chunk does not exceed the chunk size
+        final_chunks = []
+        for chunk in chunks:
+            words = word_tokenize(chunk)
+            for i in range(0, len(words), chunk_size):
+                final_chunks.append(' '.join(words[i:i + chunk_size]))
+
+        return final_chunks
+
+
+    def chunk_document(self, document: str,
+                       chunk_size: int,
+                       max_num_chunks: int
     ) -> List[str]:
         """
         Entrypoint for chunking the document into chunks of the specified chunk size.
 
         After making your custom implementation of a chunker, you can call it here.
         """
+        # max_tokens_per_chunk = 100  # Adjust according to the retrieval model's token limit
+        # max_num_chunks = 5  # Limit to 5 chunks
 
-        return self.default_chunker(document, chunk_size, max_num_chunks)
+        #return self.default_chunker(document, chunk_size, max_num_chunks)
+        chunked_document = self.rag_chunker(document=document, chunk_size=chunk_size,
+                                            max_num_chunks=max_num_chunks)
+        for i, chunk in enumerate(chunked_document):
+            bt.logging.info(f"Chunk {i + 1}:\n{chunk}\n")
+        return chunked_document
+
 
     async def forward(
         self, synapse: chunking.protocol.chunkSynapse

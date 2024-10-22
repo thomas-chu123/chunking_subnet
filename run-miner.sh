@@ -8,7 +8,7 @@ if [ $? -eq 1 ]; then
     exit 1
 fi
 
-NAME=${MINER_PM2_NAME:-"chunking_miner"}
+NAME=${MINER_PM2_NAME:-"miner_40_chunking_miner"}
 
 if pm2 describe $NAME > /dev/null 2>&1; then
     echo "Process '$NAME' is running. Stopping it..."
@@ -16,4 +16,4 @@ if pm2 describe $NAME > /dev/null 2>&1; then
     pm2 delete $NAME
 fi
 
-pm2 start neurons/miner.py --name $NAME --cron-restart="$CRON_SCHEDULE" -- --netuid $NETUID --wallet.name $COLDKEY --wallet.hotkey $HOTKEY --log_level debug "$@"
+pm2 start neurons/miner.py --name $NAME --cron-restart="$CRON_SCHEDULE" -- --netuid $NETUID --wallet.name $COLDKEY --wallet.hotkey $HOTKEY --neuron.no_check_ipfs --axon.port 10023 --log_level debug "$@"
